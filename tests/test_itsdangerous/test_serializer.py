@@ -1,4 +1,5 @@
 import hashlib
+import json
 import pickle
 from functools import partial
 from io import BytesIO
@@ -151,6 +152,36 @@ class TestSerializer:
             return
 
         assert serializer.loads(serializer.dumps({(): 1})) == {}
+
+    def test_deserializer_kwargs(self, serializer_factory):
+        class KeySerializer:
+            def dumps(self, obj, *, encode_keys=False):
+                if encode_keys:
+                    obj = {f"int:{key}": value for key, value in obj.items()}
+
+                return json.dumps(obj)
+
+            def loads(self, payload, *, decode_keys=False):
+                obj = json.loads(payload)
+
+                if decode_keys:
+                    obj = {
+                        int(key.removeprefix("int:")): value
+                        for key, value in obj.items()
+                    }
+
+                return obj
+
+        serializer = serializer_factory(
+            serializer=KeySerializer(),
+            serializer_kwargs={"encode_keys": True},
+            deserializer_kwargs={"decode_keys": True},
+        )
+
+        assert serializer.loads(serializer.dumps({0: "foo", 1: "bar"})) == {
+            0: "foo",
+            1: "bar",
+        }
 
     def test_fallback_signers(self, serializer_factory, value: Any):
         serializer = serializer_factory(signer_kwargs={"digest_method": hashlib.sha256})
